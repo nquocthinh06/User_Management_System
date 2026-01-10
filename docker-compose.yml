@@ -1,0 +1,70 @@
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: user-management-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: quocthinh@1245
+      MYSQL_DATABASE: user_management
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pquocthinh@1245" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Backend API Server
+  backend:
+    build: ./backend
+    container_name: user-management-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=quocthinh@1245
+      - DB_NAME=user_management
+      - NODE_ENV=production
+      - PORT=5000
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend React App
+  frontend:
+    build: ./frontend
+    container_name: user-management-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://backend:5000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
