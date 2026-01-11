@@ -35,11 +35,16 @@ user-management-system-fullstack/
 │   ├── Dockerfile       # Frontend Docker image
 │   └── vite.config.js   # Vite configuration
 │
-├── docker-compose.yml   # Docker Compose configuration
-├── start.bat            # Chạy local development
-├── stop.bat             # Dừng local development
-├── docker-start.bat     # Chạy với Docker
-├── docker-stop.bat      # Dừng Docker containers
+├── docker-compose.yml      # Docker Compose configuration (chính)
+├── docker-compose.alt.yml  # Docker Compose với port 3307 (cho port conflict)
+├── start.bat               # Chạy local development
+├── stop.bat                # Dừng local development
+├── docker-start.bat        # Chạy với Docker
+├── docker-stop.bat         # Dừng Docker containers
+├── check-docker.ps1        # Kiểm tra cấu hình Docker
+├── fix-port-conflict.ps1   # Kiểm tra port conflicts
+├── stop-mysql-local.ps1    # Dừng MySQL local
+├── start-docker.ps1        # Tự động khởi động Docker Desktop
 └── README.md
 ```
 
@@ -108,10 +113,12 @@ docker-compose down -v
 ```
 
 #### Scripts hỗ trợ:
-- `check-docker.ps1` - Kiểm tra cấu hình Docker
-- `start-docker.ps1` - Tự động khởi động Docker Desktop
-- `docker-start.bat` - Khởi động tất cả containers
+- `docker-start.bat` - Khởi động tất cả containers (script chính)
 - `docker-stop.bat` - Dừng tất cả containers
+- `check-docker.ps1` - Kiểm tra cấu hình Docker
+- `fix-port-conflict.ps1` - Kiểm tra port conflicts (3306, 5000, 5173)
+- `stop-mysql-local.ps1` - Dừng MySQL local (chạy as Administrator)
+- `start-docker.ps1` - Tự động khởi động Docker Desktop
 
 ---
 
@@ -294,24 +301,70 @@ npm run build
 **Lỗi: "Docker daemon is not running"**
 - Giải pháp: Khởi động Docker Desktop từ Start Menu
 - Hoặc chạy: `.\start-docker.ps1`
+- Kiểm tra Docker: `.\check-docker.ps1`
 
-**Lỗi: "Port already in use"**
-- Giải pháp: Dừng process đang dùng port hoặc thay đổi port trong docker-compose.yml
+**Lỗi: "Port already in use" (Port 3306, 5000, hoặc 5173)**
 
-**Lỗi: "Cannot connect to MySQL"**
+Kiểm tra port conflict:
+```powershell
+.\fix-port-conflict.ps1
+```
+
+**Giải pháp cho Port 3306 (MySQL):**
+1. **Dừng MySQL Local** (Khuyên dùng):
+   - Mở PowerShell as Administrator
+   - Chạy: `.\stop-mysql-local.ps1`
+   - Hoặc: Mở Services (`services.msc`) → Tìm "MySQL80" → Stop
+
+2. **Dùng port khác (3307)**:
+   ```powershell
+   docker-compose -f docker-compose.alt.yml up --build -d
+   ```
+   Lưu ý: MySQL container vẫn dùng port 3306 bên trong, chỉ port host đổi thành 3307
+
+**Giải pháp cho Port 5000/5173:**
+- Dừng process đang dùng port hoặc thay đổi port trong docker-compose.yml
+- Tìm process: `netstat -ano | findstr :5000` hoặc `netstat -ano | findstr :5173`
+
+**Lỗi: "Cannot connect to MySQL container"**
 - Giải pháp: Đợi MySQL container khởi động hoàn tất (khoảng 30-60 giây)
 - Kiểm tra logs: `docker-compose logs mysql`
+- Kiểm tra status: `docker-compose ps`
 
 ### Local Development Issues
 
 **Lỗi: "Cannot connect to database"**
-- Kiểm tra MySQL đã chạy chưa
+- Kiểm tra MySQL đã chạy chưa:
+  - Mở Services (`services.msc`) → Tìm "MySQL80" → Đảm bảo status là "Running"
 - Kiểm tra thông tin kết nối trong `backend/config/database.js`
-- Đảm bảo database `user_management` đã được tạo
+- Đảm bảo database `user_management` đã được tạo:
+  ```sql
+  mysql -u root -p
+  SHOW DATABASES;
+  CREATE DATABASE user_management;
+  ```
+- Kiểm tra firewall không chặn port 3306
 
 **Lỗi: "CORS error"**
 - Kiểm tra backend CORS configuration trong `backend/server.js`
-- Đảm bảo frontend URL được thêm vào allowedOrigins
+- Đảm bảo frontend URL (http://localhost:5173) được thêm vào allowedOrigins
+- Restart backend server
+
+**Lỗi: "Module not found"**
+- Giải pháp:
+  ```bash
+  # Xóa node_modules và package-lock.json
+  rm -r node_modules package-lock.json
+  # Hoặc trên Windows:
+  rmdir /s node_modules
+  del package-lock.json
+  
+  # Cài đặt lại
+  npm install
+  
+  # Nếu vẫn lỗi:
+  npm cache clean --force
+  ```
 
 ---
 
@@ -322,11 +375,13 @@ npm run build
 DB_HOST=mysql (hoặc localhost cho local)
 DB_PORT=3306
 DB_USER=root
-DB_PASSWORD=quocthinh@1245
+DB_PASSWORD=your_password
 DB_NAME=user_management
 NODE_ENV=production
 PORT=5000
 ```
+
+**Lưu ý**: Thay `your_password` bằng mật khẩu MySQL thực tế của bạn.
 
 ### Frontend (docker-compose.yml)
 ```
