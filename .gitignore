@@ -28,7 +28,7 @@ build/
 Thumbs.db
 
 # Docker
-*.dockerignore
+# Note: .dockerignore files are needed for Docker builds, don't ignore them
 
 # Temporary files
 *.tmp

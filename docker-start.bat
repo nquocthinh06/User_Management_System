@@ -22,46 +22,75 @@ docker info >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Docker daemon is NOT running!
     echo Please start Docker Desktop from Start Menu
-    echo Or run: "C:\Program Files\Docker\Docker\Docker Desktop.exe"
     pause
     exit /b 1
 )
 echo [OK] Docker daemon is running
 echo.
 
-:: Check if port 3306 is available
-echo [INFO] Checking port 3306 availability...
-netstat -ano | findstr :3306 >nul 2>nul
+:: Check if required ports are in use
+echo [INFO] Checking required ports (3306, 5000, 5173)...
+set portConflict=0
+
+netstat -ano | findstr ":3306" >nul 2>nul
 if %errorlevel% equ 0 (
-    echo [WARNING] Port 3306 is already in use!
+    echo [WARNING] Port 3306 is already in use (MySQL)
+    set portConflict=1
+)
+
+netstat -ano | findstr ":5000" >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [WARNING] Port 5000 is already in use (Backend)
+    set portConflict=1
+)
+
+netstat -ano | findstr ":5173" >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [WARNING] Port 5173 is already in use (Frontend)
+    set portConflict=1
+)
+
+if %portConflict% equ 1 (
     echo.
-    echo This is likely because MySQL local is running.
+    echo Solutions for port conflicts:
+    echo   - Port 3306: Run .\stop-mysql-local.ps1 (as Administrator)
+    echo              Or use: docker-compose -f docker-compose.alt.yml up --build -d
+    echo   - Port 5000/5173: Stop the process using these ports
     echo.
-    echo Solutions:
-    echo   1. Stop MySQL local and run again:
-    echo      .\stop-mysql-local.ps1
-    echo      (Run PowerShell as Administrator)
-    echo.
-    echo   2. Or use alternative port (3307):
-    echo      docker-compose -f docker-compose.alt.yml up --build -d
-    echo.
-    set /p choice="Do you want to continue anyway? (y/n): "
-    if /i not "%choice%"=="y" (
-        echo.
-        echo [INFO] Cancelled. Please resolve port conflict first.
+    echo Do you want to continue anyway? (Y/N)
+    set /p continue="Enter choice: "
+    if /i not "%continue%"=="Y" (
+        echo [INFO] Aborted by user.
         pause
         exit /b 1
     )
+    echo [INFO] Continuing with startup (may fail if port conflict persists)...
     echo.
 ) else (
-    echo [OK] Port 3306 is available
+    echo [OK] All required ports are available
     echo.
 )
 
+:: Start Docker Compose services
 echo [INFO] Starting all services with Docker Compose...
 echo.
 
 docker-compose up --build -d
+
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Failed to start services!
+    echo.
+    echo Common issues:
+    echo   - Port 3306 is already in use (MySQL local is running)
+    echo     Solution: Run .\stop-mysql-local.ps1 (as Administrator)
+    echo     Or use: docker-compose -f docker-compose.alt.yml up --build -d
+    echo.
+    echo Check logs: docker-compose logs
+    echo.
+    pause
+    exit /b 1
+)
 
 echo.
 echo ========================================
